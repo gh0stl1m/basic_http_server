@@ -39,7 +39,9 @@ fn read_stream(mut stream: TcpStream, mut buffer: [u8; 1024]) {
             println!("Got request {}", String::from_utf8_lossy(&buffer));
 
             match Request::try_from(&buffer[..]) {
-                Ok(req) => {},
+                Ok(req) => {
+                    dbg!(req);
+                },
                 Err(e) => println!("Failed to parse the request")
             }
         }
