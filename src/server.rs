@@ -1,8 +1,20 @@
-use crate::http::{Request, Response, StatusCode};
+use crate::http::{Request, Response, StatusCode, ParseError};
 
 use std::net::TcpStream;
 use std::{net::TcpListener, io::Read};
 use std::convert::TryFrom;
+
+pub trait Handler {
+
+    fn handle_request(&mut self, request: &Request)  -> Response;
+
+    fn handle_bad_request(&mut self, e: &ParseError) -> Response {
+        println!("Failed to parse request: {}", e);
+
+        Response::new(StatusCode::BadRequest, None)
+    }
+}
+
 pub struct Server {
     addr: String,
 }
@@ -14,7 +26,7 @@ impl Server {
         Self { addr }
     }
 
-    pub fn run(&self) {
+    pub fn run(&self, handler: impl Handler + Copy) {
 
         println!("Server Running on {}", self.addr);
         let listener = TcpListener::bind(&self.addr).unwrap();
@@ -22,9 +34,11 @@ impl Server {
         loop {
 
             match listener.accept() {
+
                 Ok((stream, _)) => {
                     let buffer = [0; 1024];
-                    read_stream(stream, buffer);
+
+                    handle_connection(stream, buffer, handler);
                 }
                 Err(e) => println!("Failed to establish a connection: {}", e)
             }
@@ -32,25 +46,15 @@ impl Server {
     }
 }
 
-fn read_stream(mut stream: TcpStream, mut buffer: [u8; 1024]) {
+fn handle_connection(mut stream: TcpStream, mut buffer: [u8; 1024], mut handler: impl Handler) {
 
     match stream.read(&mut buffer) {
         Ok(_) => {
             println!("Got request {}", String::from_utf8_lossy(&buffer));
 
             let response = match Request::try_from(&buffer[..]) {
-                Ok(req) => {
-                    dbg!(req);
-
-                    Response::new(
-                        StatusCode::Ok,
-                        Some("<h1> Hello world </h1>".to_string())
-                    )
-                },
-                Err(e) => {
-                    println!("Failed to parse the request: {}", e);
-                    Response::new(StatusCode::BadRequest, None)
-                }
+                Ok(req) => handler.handle_request(&req),
+                Err(e) => handler.handle_bad_request(&e),
             };
 
             if let Err(err) = response.send(&mut stream) {
