@@ -1,4 +1,4 @@
-use crate::http::Request;
+use crate::http::{Request, Response, StatusCode};
 
 use std::net::TcpStream;
 use std::{net::TcpListener, io::Read};
@@ -22,8 +22,8 @@ impl Server {
         loop {
 
             match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let mut buffer = [0; 1024];
+                Ok((stream, _)) => {
+                    let buffer = [0; 1024];
                     read_stream(stream, buffer);
                 }
                 Err(e) => println!("Failed to establish a connection: {}", e)
@@ -38,12 +38,25 @@ fn read_stream(mut stream: TcpStream, mut buffer: [u8; 1024]) {
         Ok(_) => {
             println!("Got request {}", String::from_utf8_lossy(&buffer));
 
-            match Request::try_from(&buffer[..]) {
+            let response = match Request::try_from(&buffer[..]) {
                 Ok(req) => {
                     dbg!(req);
+
+                    Response::new(
+                        StatusCode::Ok,
+                        Some("<h1> Hello world </h1>".to_string())
+                    )
                 },
-                Err(e) => println!("Failed to parse the request")
+                Err(e) => {
+                    println!("Failed to parse the request: {}", e);
+                    Response::new(StatusCode::BadRequest, None)
+                }
+            };
+
+            if let Err(err) = response.send(&mut stream) {
+                println!("Failed to send response to the TCP stream: {}", err);
             }
+
         }
         Err(e) => println!("Got error opening TCP connection {}", e),
     }
